@@ -1,0 +1,141 @@
+@import url(https://fonts.googleapis.com/css?family=Roboto:400,500,700,300,100);
+
+body {
+  font-family: "Roboto", helvetica, arial, sans-serif;
+  font-size: 24px;
+  font-weight: 400;
+  text-rendering: optimizeLegibility;
+}
+
+div.table-title {
+  display: block;
+  margin: auto;
+  max-width: 600px;
+  padding:3px;
+  width: 100%;
+}
+
+.table-title h3 {
+   font-size: 30px;
+   font-weight: 400;
+   font-style:normal;
+   font-family: "Roboto", helvetica, arial, sans-serif;
+   text-transform:uppercase;
+}
+
+th.small_header{
+	font-size: 20px;	
+	padding: 6px;
+}
+
+a{
+	text-decoration: none;
+	box-sizing: border-box;
+	display: inline-block;
+	font-size: 16px;
+	padding: 10px;
+	background: #EBEBEB;
+	border: 1px solid #9ea7af;
+	border-radius:3px;
+	color: #454545
+}
+
+div{
+    padding-vertical:10px;
+}
+
+.current {
+    color: #EBEBEB;
+    background: #454545
+}
+
+
+/*** Table Styles **/
+
+table{
+  table-layout: fixed;
+  border-spacing:0px;
+  display: table;
+  word-wrap:break-word;
+  padding-right: 0px;
+  width: 1400px
+}
+
+
+
+.table-fill {
+  border-radius:3px;
+  height: 320px;
+  width: 100%;
+  margin: none;
+}
+ 
+th {
+  border-bottom:1px solid #9ea7af;
+  border-right: 1px solid #9ea7af;
+  padding-right: 0px;
+  font-size:26px;
+  font-weight: 100;
+  color: #FFFFFF;
+  padding:16px;
+  text-align:left;
+  vertical-align:middle;
+  background: #656565;
+}
+
+th:first-child {
+  border-top-left-radius:3px;
+}
+ 
+th:last-child {
+  border-top-right-radius:3px;
+  border-right:none;
+}
+  
+tr {
+  font-weight:normal;
+  padding-right: 0px;
+}
+ 
+tr:first-child {
+  border-top:none;
+}
+
+tr:last-child {
+  border-bottom:none;
+}
+
+
+tr:last-child td:first-child {
+  border-bottom-left-radius:3px;
+}
+ 
+tr:last-child td:last-child {
+  border-bottom-right-radius:3px;
+}
+
+
+
+tr:nth-child(odd){
+  background:#EBEBEB;
+}
+
+
+td {
+  padding:8px;
+  padding-right: 0px;
+  text-align:left;
+  vertical-align:middle;
+  font-weight:300;
+  font-size:15.5px;
+  border-right: 1px solid #9ea7af;
+  
+}
+
+td:last-child {
+  border-right: 0px;
+}
+
+p{
+  display: inline;
+}
