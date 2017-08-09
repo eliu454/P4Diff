@@ -25,9 +25,7 @@ public class P4Diff {
     String coverageFile;
     String outputDir;
     String[] changeLists;
-    String help = "Usage: java -jar P4Diff.jar <coverage.xml> <output_dir> <changelist1,changelist2,...>\n" +
-      "If you just want the diff report without coverage, java -jar P4Diff.jar <output_directory> <changelist1," +
-      "changelist2,...>";
+    String help = "Usage: java -jar P4Diff.jar <coverage.xml> <output_dir> <changelist1,changelist2,...>\n";
     if(args.length != numOfCoverageArgs && args.length != numOfDiffArgs){
       System.err.println(help);
       System.exit(1);
@@ -97,12 +95,15 @@ public class P4Diff {
   //generates the html report table part for a specific changelist
   public static void generateCoverageHTMLReport(String changeListNum, HashMap<String, FileDiff> fileDiffMap){
 
+    //loop over each file
     for(Map.Entry<String, FileDiff> fileDiffEntry: fileDiffMap.entrySet()){
       FileDiff currFileDiff = fileDiffEntry.getValue();
+      //if the file has not been covered, don't loop over the lines changed
       if(!currFileDiff.isCovered()){
         writer.writeTableRow("", changeListNum, fileDiffEntry.getKey(), "N/A", "File not covered!");
         continue;
       }
+      //loop over each line changed, and print it out
       for(Range range: currFileDiff.getRanges()){
 
         int startLine = range.getStart();
@@ -288,13 +289,18 @@ public class P4Diff {
       //for speeding up grep
       pb.environment().put("LANG", "C");
       Process p = pb.start();
-      //p.waitFor();
+      p.waitFor();
+      BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
       BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
       String line;
+      String errorLine;
       //read the input while there is still more to read
       while ((line = reader.readLine()) != null) {
         output.append(line);
         output.append("\n");
+        while((errorLine = errorReader.readLine()) != null){
+          System.err.println(errorLine);
+        }
       }
     } catch (Exception e) {
       e.printStackTrace();
