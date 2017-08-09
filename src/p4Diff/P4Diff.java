@@ -68,9 +68,10 @@ public class P4Diff {
       //loop over the changelists
       for (String changeListNum : changeLists) {
         log("Currently processing changelist: " + changeListNum);
-        log("\tProcessing the command \"p4 describe " + changeListNum + "\"");
+        log("\tCalling the command \"p4 describe " + changeListNum + "\"");
         //parse the changes
         String changeListDiff = getShellCmdOutput(new String[]{"p4", "describe", changeListNum});
+        log("\tProcessing the command \"p4 describe " + changeListNum + "\"");
         HashMap<String, FileDiff> fileDiffMap = getChangesFromDiff(changeListDiff);
         log("\tProcessing the coverage file");
         //generate the map and the report
@@ -83,56 +84,52 @@ public class P4Diff {
       writer.closeHTMLFile();
       redWriter.closeHTMLFile();
       greenWriter.closeHTMLFile();
-    }
-    //generate only a html report on the diff
-    else{
-      int outputDirIndex = 0;
-      int changeListIndex = 1;
-      outputDir =  args[outputDirIndex];
-      changeLists = args[changeListIndex].split(",");
-
-      writer = new P4HTMLWriter(outputDir + "/p4Diff.html");
-      writer.writeHeader(false);
-      //loop over each changelist
-      for (String changeListNum : changeLists){
-
-        log("Currently processing changelist: " + changeListNum);
-        log("\tProcessing the command \"p4 describe " + changeListNum + "\"");
-
-        //parse the changes
-        String changeListDiff = getShellCmdOutput(new String[]{"p4", "describe", changeListNum});
-        //generate the map and the report
-        log("\tProcessing the coverage file");
-        HashMap<String, FileDiff> fileDiffMap = getChangesFromDiff(changeListDiff);
-        log("\tGenerating the html report");
-        generateDiffHTMLReport(changeListNum, fileDiffMap);
+      //copy the css file over
+      try {
+        Files.copy(P4Diff.class.getResourceAsStream("/styles.css"),
+          new File(outputDir + "/styles.css").toPath(), REPLACE_EXISTING);
+      } catch (IOException e) {
+        e.printStackTrace();
       }
-      writer.closeHTMLFile();
-    }
-
-    //copy the css file over
-    try {
-      Files.copy(P4Diff.class.getResourceAsStream("/styles.css"),
-        new File(outputDir + "/styles.css").toPath(), REPLACE_EXISTING);
-    } catch (IOException e) {
-      e.printStackTrace();
     }
   }
 
   //generates the html report table part for a specific changelist
   public static void generateCoverageHTMLReport(String changeListNum, HashMap<String, FileDiff> fileDiffMap){
+
     for(Map.Entry<String, FileDiff> fileDiffEntry: fileDiffMap.entrySet()){
-      writer.writeTableRow(changeListNum, fileDiffEntry.getKey(), fileDiffEntry.getValue().toHTMLFormat(true, true));
-      redWriter.writeTableRow(changeListNum, fileDiffEntry.getKey(), fileDiffEntry.getValue().toHTMLFormat(false, true));
-      greenWriter.writeTableRow(changeListNum, fileDiffEntry.getKey(), fileDiffEntry.getValue().toHTMLFormat(true, false));
+      FileDiff currFileDiff = fileDiffEntry.getValue();
+      if(!currFileDiff.isCovered()){
+        writer.writeTableRow("", changeListNum, fileDiffEntry.getKey(), "N/A", "File not covered!");
+        continue;
+      }
+      for(Range range: currFileDiff.getRanges()){
+
+        int startLine = range.getStart();
+        int endLine = range.getEnd();
+        for(int currLine = startLine; currLine <= endLine; currLine++){
+          if(currFileDiff.getLinesTested().contains(currLine)){
+            writer.writeTableRow("green",
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
+              currFileDiff.getLine(currLine));
+            greenWriter.writeTableRow("green",
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
+              currFileDiff.getLine(currLine));
+          }
+          else{
+            writer.writeTableRow("red",
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
+              currFileDiff.getLine(currLine));
+            redWriter.writeTableRow("red",
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
+              currFileDiff.getLine(currLine));
+
+          }
+        }
+      }
     }
   }
 
-  public static void generateDiffHTMLReport(String changeListNum, HashMap<String, FileDiff> fileDiffMap){
-    for(Map.Entry<String, FileDiff> fileDiff: fileDiffMap.entrySet()){
-      writer.writeTableRow(changeListNum, fileDiff.getKey(), fileDiff.getValue().toString());
-    }
-  }
 
   private static void getCoverageForFileDiffMap
     (HashMap<String, FileDiff> fileDiffHashMap, String testFileName){
@@ -154,7 +151,6 @@ public class P4Diff {
 
         String fileName;
         boolean fileChangedInDiff = false;
-        HashSet<Integer> linesNotTested = new HashSet<>();
         HashSet<Integer> linesTested = new HashSet<>();
 
         public void startElement(String uri, String localName,String qName,
@@ -165,7 +161,6 @@ public class P4Diff {
             //if this file is in the changelist
             if(fileDiffHashMap.containsKey(fileName)){
               fileChangedInDiff = true;
-              linesNotTested = new HashSet<>();
               linesTested = new HashSet<>();
             }
           }
@@ -175,10 +170,7 @@ public class P4Diff {
             int lineNum = Integer.parseInt(attributes.getValue("number"));
             int lineHits = Integer.parseInt(attributes.getValue("hits"));
             //if the line is not being tested
-            if(lineHits == 0) {
-              linesNotTested.add(lineNum);
-            }
-            else{
+            if(lineHits != 0) {
               linesTested.add(lineNum);
             }
           }
@@ -188,7 +180,6 @@ public class P4Diff {
           //if the file is ending
           if(qName.equalsIgnoreCase("class")){
             if(fileChangedInDiff) {
-              fileDiffHashMap.get(fileName).addLinesNotTested(linesNotTested);
               fileDiffHashMap.get(fileName).addLinesTested(linesTested);
               fileDiffHashMap.get(fileName).setCovered(true);
             }
@@ -207,7 +198,9 @@ public class P4Diff {
   //get each range of lines changed in each file
   private static HashMap<String, FileDiff> getChangesFromDiff(String changeListDiff){
     HashMap<String, FileDiff> fileDiffMap = new HashMap<>();
+    HashMap<Integer, String> lineMap = new HashMap<>();
     String methodSignature = "";
+    int currLineNum = -1;
     //go over each line of the change list diff
     for(String line: changeListDiff.split("\n")){
       if(line.contains("====")){
@@ -228,8 +221,9 @@ public class P4Diff {
             }
             else {
               currRange = new Range(Integer.parseInt(rangeStr[0]),
-                                    Integer.parseInt(rangeStr[1]));
+                Integer.parseInt(rangeStr[1]));
             }
+            currLineNum = Integer.parseInt(rangeStr[0]);
             //add range to the fileDiff in hashmap if the key exists
             if(fileDiffMap.containsKey(methodSignature)){
               fileDiffMap.get(methodSignature).addRange(currRange);
@@ -241,6 +235,9 @@ public class P4Diff {
               fileDiffMap.put(methodSignature, fileDiff);
             }
           }
+        }
+        else if(!line.isEmpty() && line.charAt(0) == '>'){
+          fileDiffMap.get(methodSignature).addLine(currLineNum++, line.substring(1, line.length()).trim());
         }
       }
     }
@@ -261,22 +258,25 @@ public class P4Diff {
     fileName = fileName.split("#")[0];
     //grep the file for which package it is in
     String grepForPackage = getShellCmdOutput(new String[] {"p4", "grep", "-n", "-e", "package", filePath});
-    //package line is after the last colon in path
-    String packageLine = grepForPackage.substring(grepForPackage.lastIndexOf(':') + 1);
-    //package name is after the first space, hopefully
-    String[] packageLineArr = packageLine.split(" ");
-    if(packageLineArr.length == 2){
-      //format the package name to return
-      String packageName = packageLineArr[1];
-      packageName = packageName.substring(0, packageName.length() - 2);
-      packageName = packageName.replaceAll("\\.", "/");
-      return packageName + "/" + fileName;
-    }
-    else{
-      System.out.println("Error finding package in file: " + fileName);
-      return "";
+    String[] grepLines = grepForPackage.split("\n");
 
+    //loop over each line to find the correct package line
+    for(String grepLine: grepLines){
+      //get rid of file info from grep
+      String lineInFile = grepLine.substring(grepLine.lastIndexOf(':') + 1);
+      //match to package regex
+      if(lineInFile.matches("package .*;")){
+        String packageName = grepLine.split(" ")[1];
+        packageName = packageName.substring(0, packageName.length() - 1);
+        packageName = packageName.replaceAll("\\.", "/");
+        return packageName + "/" + fileName;
+      }
     }
+
+    log("\tError parsing for package name in file: " + fileName);
+    log("Lines found: " + grepForPackage);
+    log("\tIf this isn't a .java file, an error is expected");
+    return "";
   }
 
   //execute a command in shell
@@ -288,7 +288,7 @@ public class P4Diff {
       //for speeding up grep
       pb.environment().put("LANG", "C");
       Process p = pb.start();
-      p.waitFor();
+      //p.waitFor();
       BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
       String line;
       //read the input while there is still more to read

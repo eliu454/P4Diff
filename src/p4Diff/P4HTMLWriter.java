@@ -46,14 +46,16 @@ public class P4HTMLWriter{
 
     writer.println("  <colgroup>");
     writer.println("    <col style=\"width:10%\">");
-    writer.println("    <col style=\"width:55%\">");
-    writer.println("    <col style=\"width:35%\">");
+    writer.println("    <col style=\"width:30%\">");
+    writer.println("    <col style=\"width:10%\">");
+    writer.println("    <col style=\"width:50%\">");
     writer.println("  </colgroup>");
 
     writer.println("  <tr>");
     writer.println("    <th class=\"small_header\">Changelist #</th>");
     writer.println("    <th>File</th>");
-    writer.println("    <th> Lines added or changed</th>");
+    writer.println("    <th> Line Num</th>");
+    writer.println("    <th> Line</th>");
     writer.println("  </tr>");
   }
 
@@ -66,12 +68,14 @@ public class P4HTMLWriter{
   }
 
   //write a table row
-  public void writeTableRow(String changeListNum,
-                            String fileName, String diff){
-    writer.println("  <tr>");
+  public void writeTableRow(String color, String changeListNum,
+                            String fileName, String lineNum,
+                            String line){
+    writer.println("  <tr class = \"" + color + "\">");
     writer.println("    <td>" + changeListNum + "</td>");
     writer.println("    <td>" + fileName + "</td>");
-    writer.println("    <td>" + diff + "</td>");
+    writer.println("    <td>" + lineNum + "</td>");
+    writer.println("    <td>" + line + "</td>");
     writer.println("  </tr>");
   }
 

@@ -114,12 +114,15 @@ tr:last-child td:last-child {
   border-bottom-right-radius:3px;
 }
 
-
-
-tr:nth-child(odd){
-  background:#EBEBEB;
+tr.green{
+  background:#ceffc9;
+  color:#498849;
 }
 
+tr.red{
+  background:#ffc9ce;
+  color:#94505a;
+}
 
 td {
   padding:8px;
