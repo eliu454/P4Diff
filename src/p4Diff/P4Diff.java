@@ -19,11 +19,12 @@ public class P4Diff {
   private static P4HTMLWriter redWriter;
   private static boolean logging;
 
+  //main driver method
   public static void main(String[] args) {
     int numOfCoverageArgs = 3;
     int numOfGitArgs = 4;
-    String help = "Usage: java -jar P4Diff.jar <coverage.xml> <output_dir> <changelist1,changelist2,...>\n" +
-      "For git, usage: java -jar P4Diff.jar git <coverage.xml> <output_dir> <changelist1,changelist2,...>\n";
+    String help = "Usage: java -jar P4Diff.jar <coverage.xml> <output_dir> <changelist_1,changelist_2,...>\n" +
+      "For git, usage: java -jar P4Diff.jar git <coverage.xml> <output_dir> <commitID_1,commitID_2,...>\n";
     if(args.length != numOfCoverageArgs && args.length != numOfGitArgs){
       System.err.println(help);
       System.exit(1);
@@ -76,13 +77,6 @@ public class P4Diff {
         generateCoverageHTMLReport(changeListNum, fileDiffMap);
       }
 
-      for (String commit: changeLists){
-        String gitDiffOutput = readGitDiff(commit);
-        HashMap<String, FileDiff> fileDiffHashMap = getChangesFromGitDiff(gitDiffOutput);
-        getCoverageForFileDiffMap(fileDiffHashMap, coverageFile);
-        generateCoverageHTMLReport(commit, fileDiffHashMap);
-      }
-
       //close the writers
       writer.closeHTMLFile();
       redWriter.closeHTMLFile();
@@ -104,6 +98,14 @@ public class P4Diff {
       String outputDir =  args[outputDirIndex];
       String[] commits = args[changeListIndex].split(",");
 
+      //initialize writers, and write headers
+      writer = new P4HTMLWriter(outputDir + "/p4Diff.html");
+      greenWriter = new P4HTMLWriter(outputDir + "/greenP4Diff.html");
+      redWriter = new P4HTMLWriter(outputDir + "/redP4Diff.html");
+      writer.writeHeader(true);
+      greenWriter.writeHeader(true);
+      redWriter.writeHeader(true);
+
       for (String commit: commits){
         log("Currently processing changelist: " + commit);
         log("\tCalling the command \"git diff " + commit + "\"");
@@ -111,7 +113,7 @@ public class P4Diff {
         HashMap<String, FileDiff> fileDiffHashMap = getChangesFromGitDiff(gitDiffOutput);
         log("\tProcessing the coverage file");
         getCoverageForFileDiffMap(fileDiffHashMap, coverageFile);
-        log("\tGenerating the html report");
+        log("\tgenerating the html report");
         generateCoverageHTMLReport(commit, fileDiffHashMap);
       }
 
@@ -165,6 +167,9 @@ public class P4Diff {
             }
             continue;
           }
+
+
+          //print out the green rows
           if(currFileDiff.getLinesTested().contains(currLineNum)){
             writer.writeTableRow("green",
               changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
@@ -173,6 +178,7 @@ public class P4Diff {
               changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
               currFileDiff.getLine(currLineNum));
           }
+          //print out the red rows
           else{
             writer.writeTableRow("red",
               changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
@@ -187,7 +193,7 @@ public class P4Diff {
     }
   }
 
-
+  //goes to each filediff and adds which lines are covered
   private static void getCoverageForFileDiffMap
     (HashMap<String, FileDiff> fileDiffHashMap, String testFileName){
 
@@ -249,6 +255,7 @@ public class P4Diff {
 
     catch(Exception e){
       System.err.println("Error parsing the xml file.");
+      System.exit(1);
     }
   }
 
@@ -310,8 +317,8 @@ public class P4Diff {
       ProcessBuilder pb = new ProcessBuilder(new String[]{"git", "diff", commitID});
       //for speeding up grep
       Process p = pb.start();
-      p.waitFor();
-      BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+      //p.waitFor();
+      //BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
       BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
       String line;
       String errorLine;
@@ -323,9 +330,11 @@ public class P4Diff {
           changed = true;
           output.append(line);
           output.append("\n");
+          /*
           while ((errorLine = errorReader.readLine()) != null) {
             System.err.println(errorLine);
           }
+          */
         }
         System.out.println(" ");
       }
@@ -356,9 +365,13 @@ public class P4Diff {
         currLine = rangeStart;
         Range currRange = new Range(rangeStart, rangeStart + rangeOffset - 1);
 
+        //if there is stuff after the last @@, that's a line in the pushed file
+        //which has not been changed
         if(line.split(" ").length > 4){
           currLine++;
         }
+
+        //now add the file diff to the map
         if(fileDiffMap.containsKey(methodSignature)){
           fileDiffMap.get(methodSignature).addRange(currRange);
         }
@@ -368,11 +381,12 @@ public class P4Diff {
           fileDiffMap.put(methodSignature, fileDiff);
         }
       }
+      //it's a line that is in the pushed file
       else if((line.startsWith(" ") || line.startsWith("+")) && !methodSignature.equals("")){
         fileDiffMap.get(methodSignature).addLine(currLine++, line.substring(1, line.length()));
       }
     }
-    return null;
+    return fileDiffMap;
   }
 
 

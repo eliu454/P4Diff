@@ -20,6 +20,9 @@ coverage.xml is the cobertura coverage file.
 output_dir is the directory that you would like the output to be in.
 changelist1,changelist2,... is a comma separated list of each changelist to diff.
 
+It is also possible to run this on git commits. To run, enter the command
+java -jar P4Diff.jar git <coverage.xml> <output_dir> <commitID_1,commitID_2,...>
+
 # Reports:
 This program will generate an HTML file in a specified directory.
 
