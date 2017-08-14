@@ -21,12 +21,10 @@ public class P4Diff {
 
   public static void main(String[] args) {
     int numOfCoverageArgs = 3;
-    int numOfDiffArgs = 2;
-    String coverageFile;
-    String outputDir;
-    String[] changeLists;
-    String help = "Usage: java -jar P4Diff.jar <coverage.xml> <output_dir> <changelist1,changelist2,...>\n";
-    if(args.length != numOfCoverageArgs && args.length != numOfDiffArgs){
+    int numOfGitArgs = 4;
+    String help = "Usage: java -jar P4Diff.jar <coverage.xml> <output_dir> <changelist1,changelist2,...>\n" +
+      "For git, usage: java -jar P4Diff.jar git <coverage.xml> <output_dir> <changelist1,changelist2,...>\n";
+    if(args.length != numOfCoverageArgs && args.length != numOfGitArgs){
       System.err.println(help);
       System.exit(1);
     }
@@ -52,9 +50,9 @@ public class P4Diff {
       int outputDirIndex = 1;
       int changeListIndex = 2;
 
-      coverageFile = args[coverageFileIndex];
-      outputDir =  args[outputDirIndex];
-      changeLists = args[changeListIndex].split(",");
+      String coverageFile = args[coverageFileIndex];
+      String outputDir =  args[outputDirIndex];
+      String[] changeLists = args[changeListIndex].split(",");
       //initialize writers, and write headers
       writer = new P4HTMLWriter(outputDir + "/p4Diff.html");
       greenWriter = new P4HTMLWriter(outputDir + "/greenP4Diff.html");
@@ -68,14 +66,21 @@ public class P4Diff {
         log("Currently processing changelist: " + changeListNum);
         log("\tCalling the command \"p4 describe " + changeListNum + "\"");
         //parse the changes
-        String changeListDiff = getShellCmdOutput(new String[]{"p4", "describe", changeListNum});
+        String p4DiffOutput = getShellCmdOutput(new String[]{"p4", "describe", changeListNum});
         log("\tProcessing the command \"p4 describe " + changeListNum + "\"");
-        HashMap<String, FileDiff> fileDiffMap = getChangesFromDiff(changeListDiff);
+        HashMap<String, FileDiff> fileDiffMap = getChangesFromP4Diff(p4DiffOutput);
         log("\tProcessing the coverage file");
         //generate the map and the report
         getCoverageForFileDiffMap(fileDiffMap, coverageFile);
         log("\tGenerating the html report");
         generateCoverageHTMLReport(changeListNum, fileDiffMap);
+      }
+
+      for (String commit: changeLists){
+        String gitDiffOutput = readGitDiff(commit);
+        HashMap<String, FileDiff> fileDiffHashMap = getChangesFromGitDiff(gitDiffOutput);
+        getCoverageForFileDiffMap(fileDiffHashMap, coverageFile);
+        generateCoverageHTMLReport(commit, fileDiffHashMap);
       }
 
       //close the writers
@@ -90,6 +95,42 @@ public class P4Diff {
         e.printStackTrace();
       }
     }
+    else if(args[0].equals("git")){
+      int coverageFileIndex = 1;
+      int outputDirIndex = 2;
+      int changeListIndex = 3;
+
+      String coverageFile = args[coverageFileIndex];
+      String outputDir =  args[outputDirIndex];
+      String[] commits = args[changeListIndex].split(",");
+
+      for (String commit: commits){
+        log("Currently processing changelist: " + commit);
+        log("\tCalling the command \"git diff " + commit + "\"");
+        String gitDiffOutput = readGitDiff(commit);
+        HashMap<String, FileDiff> fileDiffHashMap = getChangesFromGitDiff(gitDiffOutput);
+        log("\tProcessing the coverage file");
+        getCoverageForFileDiffMap(fileDiffHashMap, coverageFile);
+        log("\tGenerating the html report");
+        generateCoverageHTMLReport(commit, fileDiffHashMap);
+      }
+
+      //close the writers
+      writer.closeHTMLFile();
+      redWriter.closeHTMLFile();
+      greenWriter.closeHTMLFile();
+      //copy the css file over
+      try {
+        Files.copy(P4Diff.class.getResourceAsStream("/styles.css"),
+          new File(outputDir + "/styles.css").toPath(), REPLACE_EXISTING);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+    else{
+      System.err.println(help);
+      System.exit(1);
+    }
   }
 
   //generates the html report table part for a specific changelist
@@ -103,27 +144,42 @@ public class P4Diff {
         writer.writeTableRow("", changeListNum, fileDiffEntry.getKey(), "N/A", "File not covered!");
         continue;
       }
+      boolean isComment = false;
       //loop over each line changed, and print it out
       for(Range range: currFileDiff.getRanges()){
 
-        int startLine = range.getStart();
-        int endLine = range.getEnd();
-        for(int currLine = startLine; currLine <= endLine; currLine++){
-          if(currFileDiff.getLinesTested().contains(currLine)){
+        int startLineNum = range.getStart();
+        int endLineNum = range.getEnd();
+        for(int currLineNum = startLineNum; currLineNum <= endLineNum; currLineNum++){
+          String currLine = currFileDiff.getLine(currLineNum).trim();
+          //filter out comments and such
+          if(currLine.startsWith("/*") || currLine.startsWith("//") || currLine.startsWith("*")){
+            isComment = true;
+          }
+          else if(currLine.contains("*/")){
+            isComment = false;
+          }
+          if(isComment || currLine.trim().isEmpty()){
+            if(currLine.startsWith("//")){
+              isComment = false;
+            }
+            continue;
+          }
+          if(currFileDiff.getLinesTested().contains(currLineNum)){
             writer.writeTableRow("green",
-              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
-              currFileDiff.getLine(currLine));
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
+              currFileDiff.getLine(currLineNum));
             greenWriter.writeTableRow("green",
-              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
-              currFileDiff.getLine(currLine));
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
+              currFileDiff.getLine(currLineNum));
           }
           else{
             writer.writeTableRow("red",
-              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
-              currFileDiff.getLine(currLine));
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
+              currFileDiff.getLine(currLineNum));
             redWriter.writeTableRow("red",
-              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLine),
-              currFileDiff.getLine(currLine));
+              changeListNum, fileDiffEntry.getKey(), Integer.toString(currLineNum),
+              currFileDiff.getLine(currLineNum));
 
           }
         }
@@ -197,15 +253,15 @@ public class P4Diff {
   }
 
   //get each range of lines changed in each file
-  private static HashMap<String, FileDiff> getChangesFromDiff(String changeListDiff){
+  private static HashMap<String, FileDiff> getChangesFromP4Diff(String diffOutput){
     HashMap<String, FileDiff> fileDiffMap = new HashMap<>();
-    HashMap<Integer, String> lineMap = new HashMap<>();
     String methodSignature = "";
     int currLineNum = -1;
     //go over each line of the change list diff
-    for(String line: changeListDiff.split("\n")){
+    for(String line: diffOutput.split("\n")){
       if(line.contains("====")){
-        methodSignature = getKeyFromDiffFileLine(line);
+        methodSignature = getSignatureFromP4(line);
+        log("\tProcessing file: " + methodSignature);
       }
       //if the key was properly generated, e.g. if the file was actually
       // a java file and there was no error
@@ -238,6 +294,7 @@ public class P4Diff {
           }
         }
         else if(!line.isEmpty() && line.charAt(0) == '>'){
+          //process the line and add it to the map
           fileDiffMap.get(methodSignature).addLine(currLineNum++, line.substring(1, line.length()).trim());
         }
       }
@@ -245,8 +302,82 @@ public class P4Diff {
     return fileDiffMap;
   }
 
+  //need a method to read all the output for git diff because git commands are interactive
+  private static String readGitDiff(String commitID){
+    StringBuilder output = new StringBuilder();
+    try {
+      //call the command
+      ProcessBuilder pb = new ProcessBuilder(new String[]{"git", "diff", commitID});
+      //for speeding up grep
+      Process p = pb.start();
+      p.waitFor();
+      BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+      BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+      String line;
+      String errorLine;
+      //read the input while there is still more to read
+      boolean changed = true;
+      while(changed) {
+        changed = false;
+        while ((line = reader.readLine()) != null) {
+          changed = true;
+          output.append(line);
+          output.append("\n");
+          while ((errorLine = errorReader.readLine()) != null) {
+            System.err.println(errorLine);
+          }
+        }
+        System.out.println(" ");
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    return output.toString();
+  }
+
+  private static HashMap<String, FileDiff> getChangesFromGitDiff(String diffOutput){
+    HashMap<String, FileDiff> fileDiffMap = new HashMap<>();
+    String methodSignature = "";
+    int currLine = -1;
+    for(String line: diffOutput.split("\n")){
+      if(line.startsWith("+++")){
+        String fileName = line.substring(line.indexOf("/") + 1);
+        if(!new File(fileName).equals(new File("dev/null"))){
+          methodSignature = fileName;
+        }
+      }
+      else if(line.startsWith("@@")){
+        //will look like @@ -0,0 +1,40 @@, or may have a line from the file after the @@
+        String unifiedDiffRange = line.split(" ")[2];
+        //get rid of the plus
+        unifiedDiffRange = unifiedDiffRange.substring(1, unifiedDiffRange.length());
+        int rangeStart = Integer.parseInt(unifiedDiffRange.split(",")[0]);
+        int rangeOffset = Integer.parseInt(unifiedDiffRange.split(",")[1]);
+        currLine = rangeStart;
+        Range currRange = new Range(rangeStart, rangeStart + rangeOffset - 1);
+
+        if(line.split(" ").length > 4){
+          currLine++;
+        }
+        if(fileDiffMap.containsKey(methodSignature)){
+          fileDiffMap.get(methodSignature).addRange(currRange);
+        }
+        else{
+          FileDiff fileDiff = new FileDiff();
+          fileDiff.addRange(currRange);
+          fileDiffMap.put(methodSignature, fileDiff);
+        }
+      }
+      else if((line.startsWith(" ") || line.startsWith("+")) && !methodSignature.equals("")){
+        fileDiffMap.get(methodSignature).addLine(currLine++, line.substring(1, line.length()));
+      }
+    }
+    return null;
+  }
+
+
   //generate the package/filename key from a line
-  private static String getKeyFromDiffFileLine(String line){
+  private static String getSignatureFromP4(String line){
     String filePath;
     String fileName;
     //describes the file that was changed
@@ -258,7 +389,7 @@ public class P4Diff {
     //get rid of the change #
     fileName = fileName.split("#")[0];
     //grep the file for which package it is in
-    String grepForPackage = getShellCmdOutput(new String[] {"p4", "grep", "-n", "-e", "package", filePath});
+    String grepForPackage = getShellCmdOutput(new String[]{"p4", "grep", "-n", "-e", "package", filePath});
     String[] grepLines = grepForPackage.split("\n");
 
     //loop over each line to find the correct package line
@@ -275,7 +406,6 @@ public class P4Diff {
     }
 
     log("\tError parsing for package name in file: " + fileName);
-    log("Lines found: " + grepForPackage);
     log("\tIf this isn't a .java file, an error is expected");
     return "";
   }
@@ -289,8 +419,10 @@ public class P4Diff {
       //for speeding up grep
       pb.environment().put("LANG", "C");
       Process p = pb.start();
-      p.waitFor();
-      BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+      //for some reason, p.waitFor() causes errors on windows. the errorReader might fix this issue,
+      //but has not been tested
+      //p.waitFor();
+      //BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
       BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
       String line;
       String errorLine;
@@ -298,9 +430,11 @@ public class P4Diff {
       while ((line = reader.readLine()) != null) {
         output.append(line);
         output.append("\n");
+        /*
         while((errorLine = errorReader.readLine()) != null){
           System.err.println(errorLine);
         }
+        */
       }
     } catch (Exception e) {
       e.printStackTrace();
